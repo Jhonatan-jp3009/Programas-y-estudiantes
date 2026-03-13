@@ -1,6 +1,6 @@
-import { useRouter } from "expo-router";
+import { View, Text, TextInput, Pressable, FlatList, Alert } from "react-native";
 import { useState } from "react";
-import { Alert, FlatList, Pressable, Text, TextInput, View } from "react-native";
+import { useRouter } from "expo-router";
 import { db } from "./database";
 import { styles } from "./styles";
 
@@ -90,7 +90,7 @@ export default function Programas() {
   return (
     <View style={styles.container}>
 
-      
+
       <Pressable style={styles.backBtn} onPress={() => router.back()}>
         <Text style={styles.backBtnText}>← Volver</Text>
       </Pressable>

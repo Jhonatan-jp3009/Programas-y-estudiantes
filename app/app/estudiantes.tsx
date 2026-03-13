@@ -1,77 +1,84 @@
+import { View, Text, TextInput, Pressable, FlatList, Alert } from "react-native";
+import { useState, useEffect } from "react";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Alert, FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { db } from "./database";
 import { styles } from "./styles";
 
-export default function Programas() {
+export default function Estudiantes() {
 
   const router = useRouter();
   const [cod, setCod] = useState("");
   const [nombre, setNombre] = useState("");
-  const [buscar, setBuscar] = useState("");
+  const [email, setEmail] = useState("");
+  const [programa, setPrograma] = useState("");
   const [lista, setLista] = useState<any[]>([]);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
+
+  useEffect(() => { cargar(); }, []);
 
   function seleccionar(item: any) {
     setCod(item.cod);
     setNombre(item.nombre);
+    setEmail(item.email);
+    setPrograma(item.programa_cod);
     setSeleccionado(item.cod);
   }
 
   function limpiar() {
-    setCod("");
-    setNombre("");
+    setCod(""); setNombre(""); setEmail(""); setPrograma("");
     setSeleccionado(null);
   }
 
   async function crear() {
-    if (!cod || !nombre) {
-      Alert.alert("Error", "Ingresa código y nombre");
+    if (!cod || !nombre || !email || !programa) {
+      Alert.alert("Error", "Completa todos los campos");
+      return;
+    }
+    const prog: any = await db.getFirstAsync("SELECT cod FROM programas WHERE cod = ?", programa);
+    if (!prog) {
+      Alert.alert("Error", "El código de programa no existe");
       return;
     }
     try {
-      await db.runAsync("INSERT INTO programas (cod, nombre) VALUES (?, ?)", cod, nombre);
+      await db.runAsync(
+        `INSERT INTO estudiantes (cod, nombre, email, programa_cod) VALUES (?, ?, ?, ?)`,
+        cod, nombre, email, programa
+      );
       limpiar();
       cargar();
     } catch {
-      Alert.alert("Error", "El código ya existe");
+      Alert.alert("Error", "El código de estudiante ya existe");
     }
   }
 
   async function modificar() {
     if (!seleccionado) {
-      Alert.alert("Aviso", "Toca un programa de la lista para seleccionarlo");
+      Alert.alert("Aviso", "Toca un estudiante de la lista para seleccionarlo");
       return;
     }
-    if (!nombre) {
-      Alert.alert("Error", "Ingresa el nuevo nombre");
+    if (!nombre || !email) {
+      Alert.alert("Error", "Nombre y email son obligatorios");
       return;
     }
-    await db.runAsync("UPDATE programas SET nombre = ? WHERE cod = ?", nombre, seleccionado);
+    await db.runAsync(
+      `UPDATE estudiantes SET nombre = ?, email = ? WHERE cod = ?`,
+      nombre, email, seleccionado
+    );
     limpiar();
     cargar();
   }
 
   async function eliminar() {
     if (!seleccionado) {
-      Alert.alert("Aviso", "Toca un programa de la lista para seleccionarlo");
+      Alert.alert("Aviso", "Toca un estudiante de la lista para seleccionarlo");
       return;
     }
-    const res: any = await db.getFirstAsync(
-      "SELECT COUNT(*) as total FROM estudiantes WHERE programa_cod = ?",
-      seleccionado
-    );
-    if (res.total > 0) {
-      Alert.alert("No permitido", "Este programa tiene estudiantes asignados");
-      return;
-    }
-    Alert.alert("Confirmar", `¿Eliminar "${nombre}"?`, [
+    Alert.alert("Confirmar", `¿Eliminar a "${nombre}"?`, [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Eliminar", style: "destructive",
         onPress: async () => {
-          await db.runAsync("DELETE FROM programas WHERE cod = ?", seleccionado);
+          await db.runAsync("DELETE FROM estudiantes WHERE cod = ?", seleccionado);
           limpiar();
           cargar();
         }
@@ -80,22 +87,22 @@ export default function Programas() {
   }
 
   async function cargar() {
-    const datos = await db.getAllAsync(
-      `SELECT * FROM programas WHERE cod LIKE ? OR nombre LIKE ?`,
-      `%${buscar}%`, `%${buscar}%`
-    );
+    const datos = await db.getAllAsync(`
+      SELECT e.*, p.nombre as programa_nombre
+      FROM estudiantes e
+      LEFT JOIN programas p ON e.programa_cod = p.cod
+    `);
     setLista(datos as any[]);
   }
 
   return (
     <View style={styles.container}>
 
-      
       <Pressable style={styles.backBtn} onPress={() => router.back()}>
         <Text style={styles.backBtnText}>← Volver</Text>
       </Pressable>
 
-      <Text style={styles.title}>Programas</Text>
+      <Text style={styles.title}>Estudiantes</Text>
 
       {seleccionado && (
         <Text style={styles.seleccionadoText}>
@@ -111,14 +118,34 @@ export default function Programas() {
         maxLength={4}
         editable={!seleccionado}
       />
-
       <TextInput
         style={styles.input}
-        placeholder="Nombre (máx 30 caracteres)"
+        placeholder="Nombre"
         value={nombre}
         onChangeText={setNombre}
-        maxLength={30}
+        maxLength={90}
       />
+      <TextInput
+        style={styles.input}
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        maxLength={100}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+      <TextInput
+        style={[styles.input, seleccionado ? styles.inputDeshabilitado : {}]}
+        placeholder="Código de Programa"
+        value={programa}
+        onChangeText={setPrograma}
+        maxLength={4}
+        editable={!seleccionado}
+      />
+
+      {seleccionado && (
+        <Text style={styles.hint}>ℹ️ Al modificar solo se cambia nombre y email</Text>
+      )}
 
       <View style={styles.fila}>
         <Pressable style={[styles.button, styles.btnCrear]} onPress={crear}>
@@ -135,19 +162,7 @@ export default function Programas() {
         </Pressable>
       </View>
 
-      <View style={styles.fila}>
-        <TextInput
-          style={[styles.input, { flex: 1, marginBottom: 0 }]}
-          placeholder="Buscar por código o nombre..."
-          value={buscar}
-          onChangeText={setBuscar}
-        />
-        <Pressable style={[styles.button, styles.btnBuscar, { marginBottom: 0, marginLeft: 8 }]} onPress={cargar}>
-          <Text style={styles.buttonText}>Buscar</Text>
-        </Pressable>
-      </View>
-
-      <Text style={styles.hint}>👆 Toca un item para seleccionarlo</Text>
+      <Text style={styles.hint}>👆 Toca un estudiante para seleccionarlo</Text>
 
       <FlatList
         data={lista}
@@ -157,8 +172,9 @@ export default function Programas() {
             onPress={() => seleccionar(item)}
             style={[styles.item, seleccionado === item.cod && styles.itemSeleccionado]}
           >
-            <Text style={styles.itemCod}>{item.cod}</Text>
-            <Text style={styles.itemNombre}>{item.nombre}</Text>
+            <Text style={styles.itemCod}>{item.cod} — {item.nombre}</Text>
+            <Text style={styles.itemNombre}>📧 {item.email}</Text>
+            <Text style={styles.itemPrograma}>🎓 {item.programa_nombre ?? item.programa_cod}</Text>
           </Pressable>
         )}
       />
